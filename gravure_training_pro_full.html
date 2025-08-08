@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>グラビア印刷 総合トレーニング（完全オフライン版）</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#151a22; --fg:#e6e6e6; --muted:#9aa4b2; --accent:#3ea6ff;
+    --ok:#20c997; --ng:#ff6b6b; --btn:#1e2632;
+  }
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:system-ui, -apple-system,'Segoe UI', Roboto,'Noto Sans JP',sans-serif;}
+  .wrap{max-width:1100px;margin:0 auto;padding:16px;}
+  header{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:1.3rem;margin:0}
+  .tabs{display:flex;gap:8px;margin-top:8px}
+  .tab{padding:8px 12px;border:1px solid #2a3442;border-radius:10px;background:var(--panel);cursor:pointer}
+  .tab.active{background:var(--accent);color:#04131e;border-color:transparent}
+  .panel{background:var(--panel);border:1px solid #222a35;border-radius:12px;padding:16px;margin-top:12px}
+  .grid{display:grid;gap:12px}
+  .grid.cols-3{grid-template-columns: repeat(auto-fit,minmax(260px,1fr));}
+  select,button,input[type="number"],input[type="text"]{
+    background:var(--btn);color:var(--fg);border:1px solid #2a3442;border-radius:8px;padding:8px 10px;font-size:14px;
+  }
+  button{cursor:pointer}
+  button.primary{background:var(--accent);color:#001018;border:none}
+  .muted{color:var(--muted)}
+  .tag{display:inline-block;padding:2px 8px;border:1px solid #2a3442;border-radius:999px;font-size:12px;color:var(--muted)}
+  .qcard{margin-top:12px;background:#0f131a;border:1px solid #1f2740;border-radius:10px;overflow:hidden}
+  .qhead{padding:14px 14px 8px 14px;font-weight:600}
+  .qmeta{padding:0 14px 12px 14px;color:var(--muted);font-size:12px}
+  .choices{display:grid;gap:8px;padding:12px}
+  .choice{padding:10px;border-radius:8px;border:1px solid #2a3442;background:var(--btn);text-align:left}
+  .choice:disabled{opacity:0.7}
+  .choice.correct{border-color:var(--ok)}
+  .choice.wrong{border-color:var(--ng)}
+  .feedback{padding:12px;border-top:1px solid #1f2740}
+  .small{font-size:12px}
+  canvas{background:#0d1117;border:1px solid #1f2740;border-radius:8px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .col{flex:1 1 320px}
+  .glossary-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:10px}
+  .term{padding:10px;border:1px solid #2a3442;background:var(--btn);border-radius:8px;cursor:pointer}
+  .term:hover{border-color:var(--accent)}
+  .detail{margin-top:10px;padding:10px;border:1px solid #2a3442;border-radius:8px;background:#0f131a}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🎨 グラビア印刷 総合トレーニング（完全オフライン版）</h1>
+    <span class="muted">技術 × 色校正 × デザイン × 実務判断</span>
+  </header>
+  <div class="tabs">
+    <button class="tab active" data-tab="train">トレーニング</button>
+    <button class="tab" data-tab="glossary">用語集</button>
+    <button class="tab" data-tab="history">履歴</button>
+  </div>
+
+  <div id="tab-train" class="panel">
+    <div class="grid cols-3">
+      <div>
+        <div class="small muted">出題モード</div>
+        <select id="mode">
+          <option value="random">ランダム</option>
+          <option value="category">カテゴリ指定</option>
+          <option value="weak">苦手分野優先</option>
+          <option value="wrong">間違えた問題のみ</option>
+        </select>
+      </div>
+      <div>
+        <div class="small muted">カテゴリ（複数選択可）</div>
+        <select id="category" multiple size="8"></select>
+      </div>
+      <div>
+        <div class="small muted">出題数</div>
+        <input id="count" type="number" min="1" max="100" value="10"/>
+        <div style="height:8px"></div>
+        <button id="start" class="primary">▶ スタート</button>
+        <div style="height:8px"></div>
+        <div id="stats" class="small muted">ロード中…</div>
+      </div>
+    </div>
+    <div id="game"></div>
+  </div>
+
+  <div id="tab-glossary" class="panel" style="display:none">
+    <div class="grid cols-3">
+      <div>
+        <div class="small muted">検索</div>
+        <input id="gSearch" type="text" placeholder="用語を入力…" />
+      </div>
+      <div>
+        <div class="small muted">カテゴリ</div>
+        <select id="gCat">
+          <option value="all">すべて</option>
+        </select>
+      </div>
+      <div style="align-self:end">
+        <span id="gCount" class="tag">0 語</span>
+      </div>
+    </div>
+    <div id="gList" class="glossary-list"></div>
+    <div id="gDetail" class="detail" style="display:none"></div>
+  </div>
+
+  <div id="tab-history" class="panel" style="display:none">
+    <h3 style="margin-top:0">📈 学習履歴</h3>
+    <div class="row">
+      <div class="col">
+        <canvas id="chartOverall" width="520" height="260" aria-label="全体推移"></canvas>
+      </div>
+      <div class="col">
+        <canvas id="chartByCat" width="520" height="260" aria-label="カテゴリ別"></canvas>
+      </div>
+    </div>
+    <div class="small muted" id="histInfo"></div>
+  </div>
+</div>
+
+<!-- Embedded datasets -->
+<script type="application/json" id="questionsData"></script>
+<script type="application/json" id="glossaryData"></script>
+
+<script>
+// ===== safe localStorage wrapper (fallback to memory) =====
+const safeStore = (()=>{
+  try{
+    const k='__test__'+Math.random(); localStorage.setItem(k,'1'); localStorage.removeItem(k);
+    return { getItem:k=>localStorage.getItem(k), setItem:(k,v)=>localStorage.setItem(k,v) };
+  }catch(e){
+    const m={}; console.warn('localStorage unavailable, using memory store.', e);
+    return { getItem:k=> (k in m? m[k] : null), setItem:(k,v)=>{ m[k]=String(v); } };
+  }
+})();
+
+const CATS = [
+  "基礎/方式","基材/表面処理","インキ/溶剤","乾燥/設備","色/色校正",
+  "デザイン/調子/しずる","網点/線数/階調","見当/レジ","欠陥/トラブル",
+  "品質保証/実務判断","CMYK/特色/プロファイル"
+];
+
+const STATE = {
+  all: [],
+  glossary: [],
+  wrongIds: new Set(JSON.parse(safeStore.getItem('gravure_wrongIds')||'[]')),
+  history: JSON.parse(safeStore.getItem('gravure_history')||'[]'),
+  mastery: JSON.parse(safeStore.getItem('gravure_mastery')||'{}'),
+};
+
+function savePersist(){
+  safeStore.setItem('gravure_wrongIds', JSON.stringify([...STATE.wrongIds]));
+  safeStore.setItem('gravure_history', JSON.stringify(STATE.history));
+  safeStore.setItem('gravure_mastery', JSON.stringify(STATE.mastery));
+}
+function $(id){ return document.getElementById(id); }
+
+// Tabs
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(e=>e.classList.remove('active'));
+    t.classList.add('active');
+    const tab=t.dataset.tab;
+    ['train','glossary','history'].forEach(name=> $('tab-'+name).style.display = (name===tab)?'block':'none');
+    if(tab==='history') drawCharts();
+  });
+});
+
+// Inject datasets (embedded below as template literals)
+(function inject(){
+  document.getElementById('questionsData').textContent = QUESTIONS_JSON_STRING;
+  document.getElementById('glossaryData').textContent  = GLOSSARY_JSON_STRING;
+  try{
+    const rawQ = JSON.parse(document.getElementById('questionsData').textContent);
+    const rawG = JSON.parse(document.getElementById('glossaryData').textContent);
+    // Sanitize: keep only well-formed questions
+    STATE.all = rawQ.filter(q=> Array.isArray(q.choices) && typeof q.answer==='number' && q.answer>=0 && q.answer<q.choices.length && typeof q.q==='string' && typeof q.id==='string' && typeof q.cat==='string');
+    // Glossary items must have term/desc
+    STATE.glossary = rawG.filter(t=> t && typeof t.term==='string' && typeof t.desc==='string');
+  }catch(err){
+    alert('データの読み込みに失敗しました: '+err.message);
+  }
+  initUI();
+})();
+
+function initUI(){
+  const sel=$('category'); sel.innerHTML='';
+  CATS.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; sel.appendChild(o); });
+  const gSel=$('gCat'); CATS.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=c; gSel.appendChild(o); });
+
+  $('stats').textContent = `問題数: ${STATE.all.length}　誤答蓄積: ${STATE.wrongIds.size}　履歴: ${STATE.history.length}件`;
+
+  $('start').addEventListener('click', startGame);
+  $('gSearch').addEventListener('input', renderGlossary);
+  $('gCat').addEventListener('change', renderGlossary);
+  renderGlossary();
+}
+
+// ===== Training =====
+let session=null;
+function startGame(){
+  const mode=$('mode').value;
+  const count=Math.max(1, Math.min(100, parseInt($('count').value||'10')));
+  let pool=STATE.all.slice();
+
+  if(mode==='category'){
+    const chosen=[...$('category').selectedOptions].map(o=>o.value);
+    if(chosen.length) pool=pool.filter(q=> chosen.includes(q.cat));
+  } else if(mode==='wrong'){
+    pool=pool.filter(q=> STATE.wrongIds.has(q.id));
+  } else if(mode==='weak'){
+    pool.sort((a,b)=> getWeakScore(b.id)-getWeakScore(a.id));
+  }
+
+  if(pool.length===0){ alert('選択条件に合う問題がありません。'); return; }
+  shuffle(pool);
+  const selected=pool.slice(0,count);
+  session={ idx:0, list:selected, correct:0, total:selected.length, byCat:{} };
+  $('game').innerHTML='';
+  showQuestion();
+}
+function getWeakScore(id){
+  const m=STATE.mastery[id]||{seen:0,correct:0};
+  if(m.seen===0) return 1;
+  return 1 - (m.correct/m.seen);
+}
+function showQuestion(){
+  const g=$('game');
+  const i=session.idx;
+  const q=session.list[i];
+  const card=document.createElement('div');
+  card.className='qcard';
+  card.innerHTML = `
+    <div class="qhead">${escapeHtml(q.q)}</div>
+    <div class="qmeta">${q.cat}　<span class="tag">難度:${q.level||2}</span> ${q.tags?.map(t=>`<span class="tag">${t}</span>`).join(' ')||''}</div>
+    <div class="choices">
+      ${q.choices.map((c,idx)=>`<button class="choice" data-i="${idx}">${escapeHtml(c)}</button>`).join('')}
+    </div>
+  `;
+  g.appendChild(card);
+  card.scrollIntoView({behavior:'smooth', block:'start'});
+  card.querySelectorAll('.choice').forEach(btn=>{
+    btn.addEventListener('click', ()=>selectChoice(card, q, parseInt(btn.dataset.i)));
+  });
+}
+function selectChoice(card,q,i){
+  const ok=(i===q.answer);
+  const btns=card.querySelectorAll('.choice');
+  btns.forEach((b,idx)=>{
+    b.disabled=true;
+    if(idx===q.answer) b.classList.add('correct');
+    if(idx===i && !ok) b.classList.add('wrong');
+  });
+
+  const m=STATE.mastery[q.id]||{seen:0,correct:0};
+  m.seen+=1; if(ok) m.correct+=1; STATE.mastery[q.id]=m;
+
+  if(ok){ STATE.wrongIds.delete(q.id); session.correct+=1; }
+  else { STATE.wrongIds.add(q.id); }
+  savePersist();
+
+  const fb=document.createElement('div');
+  fb.className='feedback';
+  fb.innerHTML=(ok?`<span class="right">正解！</span>`:`<span class="wrongT">不正解…</span> 正解は「${escapeHtml(q.choices[q.answer])}」。`)+ ' ' + escapeHtml(q.exp||'');
+  card.appendChild(fb);
+  const next=document.createElement('div');
+  next.style.padding='12px'; next.innerHTML='<button class="primary">次へ</button>';
+  card.appendChild(next);
+  next.querySelector('button').addEventListener('click', nextQuestion);
+
+  session.byCat[q.cat]=session.byCat[q.cat]||{c:0,t:0};
+  session.byCat[q.cat].t+=1; if(ok) session.byCat[q.cat].c+=1;
+}
+function nextQuestion(){
+  session.idx+=1;
+  if(session.idx<session.list.length) showQuestion(); else endSession();
+}
+function endSession(){
+  STATE.history.push({ts:Date.now(), correct:session.correct, total:session.total, byCat:session.byCat});
+  savePersist();
+  const g=$('game');
+  const res=document.createElement('div'); res.className='panel';
+  const rate=Math.round(session.correct/session.total*100);
+  res.innerHTML = `<h3>結果: ${session.correct} / ${session.total}（${rate}%）</h3>
+    <div class="small muted">苦手分野（正答率が低い順）:</div>`;
+  const arr=Object.entries(session.byCat).map(([k,v])=>[k, v.c/(v.t||1)]).sort((a,b)=>a[1]-b[1]);
+  res.innerHTML += `<div>${arr.map(([k,p])=>`<span class="tag">${k}: ${(p*100).toFixed(0)}%</span>`).join(' ')||'<span class="tag">データなし</span>'}</div>`;
+  g.appendChild(res); res.scrollIntoView({behavior:'smooth'});
+}
+
+// ===== Glossary =====
+function renderGlossary(){
+  const q=$('gSearch').value.trim().toLowerCase();
+  const cat=$('gCat').value;
+  const list=$('gList'); list.innerHTML='';
+  const filtered=STATE.glossary.filter(t=>{
+    const okCat=(cat==='all' || t.cat===cat);
+    const okQ=(!q || (t.term||'').toLowerCase().includes(q) || (t.desc||'').toLowerCase().includes(q));
+    return okCat && okQ;
+  });
+  $('gCount').textContent = `${filtered.length} 語`;
+  filtered.forEach(t=>{
+    const el=document.createElement('div'); el.className='term';
+    el.innerHTML = `<div><b>${escapeHtml(t.term)}</b></div><div class="small muted">${escapeHtml(t.cat||'')}</div>`;
+    el.addEventListener('click', ()=> showTerm(t)); list.appendChild(el);
+  });
+  $('gDetail').style.display='none';
+}
+function showTerm(t){
+  const d=$('gDetail'); d.style.display='block';
+  d.innerHTML = `<b>${escapeHtml(t.term)}</b> <span class="tag">${escapeHtml(t.cat||'')}</span>
+  <div style="margin-top:6px">${escapeHtml(t.desc||'')}</div>`;
+}
+
+// ===== Charts =====
+function drawCharts(){
+  const c1=$('chartOverall').getContext('2d');
+  const c2=$('chartByCat').getContext('2d');
+  [c1,c2].forEach(ctx=>ctx.clearRect(0,0,520,260));
+  const H=STATE.history;
+  $('histInfo').textContent = `履歴: ${H.length}件`;
+  if(H.length){
+    const acc=H.map(h=> h.correct/h.total);
+    const maxX=Math.max(1,H.length-1);
+    const pad=30, W=520, HH=260;
+    drawAxes(c1,W,HH,pad,"回","正答率");
+    c1.beginPath();
+    acc.forEach((v,i)=>{
+      const x=pad+(W-pad*2)*(i/maxX);
+      const y=HH-pad-(HH-pad*2)*(v);
+      if(i===0) c1.moveTo(x,y); else c1.lineTo(x,y);
+    });
+    c1.stroke();
+  }
+  const catStats={};
+  H.forEach(h=>{ for(const k in h.byCat){ const o=h.byCat[k]; const t=catStats[k]||{c:0,t:0}; t.c+=o.c; t.t+=o.t; catStats[k]=t; } });
+  const entries=Object.entries(catStats).map(([k,v])=>[k, v.t? v.c/v.t : 0]).sort((a,b)=>a[0].localeCompare(b[0]));
+  const W2=520,H2=260,pad=30; drawAxes(c2,W2,H2,pad,"カテゴリ","平均正答率");
+  const barW=(W2-pad*2)/Math.max(1,entries.length);
+  entries.forEach((e,i)=>{
+    const x=pad+i*barW+4; const h=(H2-pad*2)*e[1]; const y=H2-pad-h;
+    c2.fillRect(x,y, barW-8, h);
+  });
+}
+function drawAxes(ctx,W,H,pad,xlabel,ylabel){
+  ctx.strokeStyle='#2a3442'; ctx.fillStyle='#9aa4b2';
+  ctx.beginPath(); ctx.moveTo(pad,pad); ctx.lineTo(pad,H-pad); ctx.lineTo(W-pad,H-pad); ctx.stroke();
+  ctx.fillText(xlabel, W/2, H-6);
+  ctx.save(); ctx.translate(10,H/2); ctx.rotate(-Math.PI/2); ctx.fillText(ylabel,0,0); ctx.restore();
+  ctx.strokeStyle='#3ea6ff'; ctx.fillStyle='#3ea6ff';
+}
+
+// Utils
+function shuffle(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j]],a[i]; } }
+function escapeHtml(s){ return String(s||'').replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+</script>
+
+<script>
+// === Embedded JSON (template literals) ===
+const QUESTIONS_JSON_STRING = `[{"id": "Q0001", "cat": "基礎/方式", "q": "グラビア印刷の版はどのような構造？", "choices": ["凹部にセルを彫り、インキを貯める", "凸部がインキを保持する", "孔を通してインキを通過させる", "感熱層が発色する"], "answer": 0, "exp": "グラビアは凹版。セル（小さな凹部）にインキを保持し、ドクターブレードで余分を掻き取り基材へ転移。", "level": 2, "tags": ["版式", "基礎"]}, {"id": "Q0002", "cat": "基材/表面処理", "q": "未処理のOPPに印刷密着を確保するため、一般的にまず行うべき前処理は？", "choices": ["コロナ処理（表面活性化）", "乾燥炉の温度を上げる", "アルミ蒸着", "水性プライマーの撤去"], "answer": 0, "exp": "ぬれ性を上げるためコロナ処理で表面自由エネルギー（ダイン値）を高める。", "level": 2, "tags": ["OPP", "コロナ", "密着"]}, {"id": "Q0003", "cat": "インキ/溶剤", "q": "グラビア用溶剤系インキで極性が高めの基材（NY/EVOH等）に適合しやすい溶剤主体系は？", "choices": ["エタノール/酢酸エチル系", "トルエン/MEK系のみ", "水/IPA系のみ", "エチレングリコールのみ"], "answer": 0, "exp": "基材やインキ樹脂に合わせて溶解力・乾燥性を調整。アルコール＋エステル系は汎用的。", "level": 2, "tags": ["溶剤", "樹脂溶解"]}, {"id": "Q0004", "cat": "乾燥/設備", "q": "ドクターブレードの主な役割は？", "choices": ["版上の余分なインキを掻き取りセル内だけに残す", "基材の静電気を除去する", "版胴温度を一定に保つ", "トンネル乾燥の風量を制御する"], "answer": 0, "exp": "ブレードで版表面の余分インキを除去し、セル内のインキのみを転移させる。", "level": 2, "tags": ["ブレード", "版胴"]}, {"id": "Q0005", "cat": "色/色校正", "q": "色校正で『指示濃度 1.40D』とある。ここでDは一般に何を指す？", "choices": ["濃度（Density）", "ドット率", "ΔE", "グロス値"], "answer": 0, "exp": "Dは濃度(Density)。分光/濃度計で測定するターゲット。", "level": 2, "tags": ["色校正", "濃度"]}, {"id": "Q0006", "cat": "デザイン/調子/しずる", "q": "食品パッケージで『しずる感』を高める画像処理として有効なのは？", "choices": ["ハイライトのコントラスト微増＋局所シャープネス", "全体彩度を過剰に上げる", "シャドウを極端に潰す", "網点線数を下げて粒状感を出す"], "answer": 0, "exp": "照り・水滴・エッジのキレを適切に強調するのが定石。やり過ぎは禁物。", "level": 2, "tags": ["しずる", "レタッチ"]}, {"id": "Q0007", "cat": "網点/線数/階調", "q": "一般にフィルムグラビアの疑似網点で線数を上げると起こりやすい問題は？", "choices": ["トーンジャンプやモアレ", "インキの泡立ち", "基材の延伸", "エンボス化"], "answer": 0, "exp": "線数の最適化と製版/スクリーン設計で回避。", "level": 2, "tags": ["網点", "モアレ"]}, {"id": "Q0008", "cat": "見当/レジ", "q": "レジずれの主因として考えにくいものは？", "choices": ["巻取りテンション不安定", "版周長ミスマッチ", "基材熱収縮/伸長", "インキ粘度が高いことのみ"], "answer": 3, "exp": "粘度だけで大きな見当ズレは起きにくい。テンション/周長/熱変形が本筋。", "level": 2, "tags": ["レジ", "テンション"]}, {"id": "Q0009", "cat": "欠陥/トラブル", "q": "ピンホールが散発する。まず確認すべきは？", "choices": ["版の傷・汚れ、ブレード圧、異物混入", "乾燥温度を下げる", "巻取径を小さくする", "デザインを変える"], "answer": 0, "exp": "物理的欠陥要因の点検が第一歩。", "level": 2, "tags": ["ピンホール", "ブレード"]}, {"id": "Q0010", "cat": "品質保証/実務判断", "q": "初回色校で基準よりΔE=3.5。顧客許容はΔE≤3.0。合理的な初動は？", "choices": ["原因切り分け（計測器・版・インキ・乾燥）→再校", "すぐ量産移行", "すべて版の責任として再製版", "基準値を後から上げる"], "answer": 0, "exp": "計測系/プロファイル/インキ/条件などの切り分け→修正→再校。", "level": 2, "tags": ["実務判断", "色差"]}, {"id": "Q0011", "cat": "CMYK/特色/プロファイル", "q": "特色指定のPANTONE色をCMYKへ変換する際の注意で正しいのは？", "choices": ["基材色・白インキ有無・プロファイルで大きく変わる", "常にCMYK固定値に置き換えればよい", "RGBに一度変換するのが最適", "ΔE評価は不要"], "answer": 0, "exp": "基材や白引きの有無、プロファイルに依存。ΔE評価で合否判断。", "level": 2, "tags": ["特色", "プロファイル"]}, {"id": "Q0012", "cat": "基材/表面処理", "q": "OPP外層の印刷前ダイン目標としてよく用いられる基準はどれ？", "choices": ["38 dyn/cm 以上", "30 dyn/cm 程度", "65 dyn/cm 以上", "20 dyn/cm 程度"], "answer": 0, "exp": "一般に印刷用は 38 dyn/cm 以上を指標とすることが多い（仕様により異なる）。", "level": 2, "tags": ["ダイン", "OPP"]}, {"id": "Q0013", "cat": "基材/表面処理", "q": "OPP外層の印刷前ダイン目標としてよく用いられる基準はどれ？", "choices": ["40 dyn/cm 以上", "30 dyn/cm 程度", "65 dyn/cm 以上", "20 dyn/cm 程度"], "answer": 0, "exp": "一般に印刷用は 40 dyn/cm 以上を指標とすることが多い（仕様により異なる）。", "level": 2, "tags": ["ダイン", "OPP"]}, {"id": "Q0014", "cat": "基材/表面処理", "q": "OPP外層の印刷前ダイン目標としてよく用いられる基準はどれ？", "choices": ["42 dyn/cm 以上", "30 dyn/cm 程度", "65 dyn/cm 以上", "20 dyn/cm 程度"], "answer": 0, "exp": "一般に印刷用は 42 dyn/cm 以上を指標とすることが多い（仕様により異なる）。", "level": 2, "tags": ["ダイン", "OPP"]}, {"id": "Q0015", "cat": "乾燥/設備", "q": "乾燥で先に飛ばしたい溶剤として適切なのは？", "choices": ["エタノール（bp約78℃）", "酢酸ブチル（bp約126℃）", "PMアセテート（bp約145℃）", "ジエチレングリコール（高沸点）"], "answer": 0, "exp": "低沸点溶剤から効率よく揮発させるのが基本。", "level": 2, "tags": ["乾燥", "溶剤残留"]}, {"id": "Q0016", "cat": "乾燥/設備", "q": "溶剤残留対策として有効性が低いのは？", "choices": ["乾燥温度/風量/ダクト整流の最適化", "溶剤構成の見直し（低沸点比率UP）", "印刷速度のみ極端に上げる", "ドライヤーゾーンの段階最適化"], "answer": 2, "exp": "速度だけ上げるのは逆効果になりやすい。プロセス全体最適が必要。", "level": 2, "tags": ["乾燥", "溶剤残留"]}, {"id": "Q0017", "cat": "色/色校正", "q": "本機校正前の打ち合わせで最も優先すべき項目は？", "choices": ["基準試験片/見本/照明条件/測色ルールの合意", "インキメーカーの社名", "現場の昼食手配", "パレットの木材種"], "answer": 0, "exp": "評価系の合意がないと校了判定が揺らぐ。", "level": 2, "tags": ["色校", "評価条件"]}, {"id": "Q0018", "cat": "色/色校正", "q": "色校でメタメリズムが疑われる場合の対処で適切なのは？", "choices": ["照明条件（D50/D65/店頭照明）での評価比較", "観察者の主観だけで決める", "RGB画像に戻して確認", "L*値のみで評価"], "answer": 0, "exp": "光源依存の見え方差メタメリズムは複数光源で確認する。", "level": 2, "tags": ["色校", "評価条件"]}, {"id": "Q0019", "cat": "CMYK/特色/プロファイル", "q": "CMYK変換時にプロファイルを無視すると起こりやすい問題は？", "choices": ["色再現の不一致とトーンカーブの崩れ", "ファイルサイズの肥大化のみ", "印刷速度低下のみ", "網点が必ず消える"], "answer": 0, "exp": "プロファイル不整合は色差拡大や階調再現悪化を招く。", "level": 2, "tags": ["プロファイル", "白引き"]}, {"id": "Q0020", "cat": "CMYK/特色/プロファイル", "q": "下地に白インキを引く目的として不適切なのは？", "choices": ["基材色の影響低減", "発色の安定化", "摩擦係数の低下だけを狙う", "特色の色再現性向上"], "answer": 2, "exp": "COF低下は主目的ではない。", "level": 2, "tags": ["プロファイル", "白引き"]}, {"id": "Q0021", "cat": "デザイン/調子/しずる", "q": "『しずる感』を高めるためにハイライトをどう扱うと良い？", "choices": ["適度にコントラスト/立体感を強調", "強いノイズを加える", "全体をくすませる", "彩度を極端に下げる"], "answer": 0, "exp": "局所的な強調で新鮮さ・湿潤感を演出。やりすぎは禁物。", "level": 2, "tags": ["しずる", "画像処理"]}, {"id": "Q0022", "cat": "デザイン/調子/しずる", "q": "『しずる感』を高めるためにエッジをどう扱うと良い？", "choices": ["適度にコントラスト/立体感を強調", "強いノイズを加える", "全体をくすませる", "彩度を極端に下げる"], "answer": 0, "exp": "局所的な強調で新鮮さ・湿潤感を演出。やりすぎは禁物。", "level": 2, "tags": ["しずる", "画像処理"]}, {"id": "Q0023", "cat": "デザイン/調子/しずる", "q": "『しずる感』を高めるために水滴のハイライトをどう扱うと良い？", "choices": ["適度にコントラスト/立体感を強調", "強いノイズを加える", "全体をくすませる", "彩度を極端に下げる"], "answer": 0, "exp": "局所的な強調で新鮮さ・湿潤感を演出。やりすぎは禁物。", "level": 2, "tags": ["しずる", "画像処理"]}, {"id": "Q0024", "cat": "見当/レジ", "q": "長手方向の周期的な見当ずれ。疑うべきは？", "choices": ["版周長の差/ギア比", "湿度のみ", "作業者の歩行", "印刷色数"], "answer": 0, "exp": "周長差や駆動系の周期ズレと相関。", "level": 2, "tags": ["レジ", "テンション"]}, {"id": "Q0025", "cat": "見当/レジ", "q": "横方向の不規則なレジずれ。まず確認するのは？", "choices": ["ウェブテンション/蛇行制御", "ドクターブレード角度", "網点形状", "基材の色"], "answer": 0, "exp": "テンション・蛇行・エッジガイドなど搬送安定性が鍵。", "level": 2, "tags": ["レジ", "テンション"]}, {"id": "Q0026", "cat": "欠陥/トラブル", "q": "ミスティング（霧状飛散）の抑制策で有効なのは？", "choices": ["粘度/表面張力の最適化と速度/風の見直し", "乾燥を止める", "版線数を無限大にする", "基材厚を倍にする"], "answer": 0, "exp": "物性とプロセス条件の最適化が基本。", "level": 2, "tags": ["欠陥", "ブロッキング"]}, {"id": "Q0027", "cat": "欠陥/トラブル", "q": "ブロッキング（巻きブロック）対策として優先すべきは？", "choices": ["溶剤残留低減・巻取温度管理・巻圧最適化", "デザインの変更のみ", "コロナ処理を落とす", "白インキを無くす"], "answer": 0, "exp": "残留溶剤の低減、温度/圧の管理など。", "level": 2, "tags": ["欠陥", "ブロッキング"]}, {"id": "Q0028", "cat": "品質保証/実務判断", "q": "見本よりやや赤みに寄った。最も速い対処は？", "choices": ["Cを少し増やし、Mを少し下げる等の現場補正", "版を作り直す", "照明を暗くする", "観察者を変える"], "answer": 0, "exp": "小幅な色ズレは現場補正でリードタイム短縮。", "level": 2, "tags": ["判断", "量産"]}, {"id": "Q0029", "cat": "品質保証/実務判断", "q": "量産前に残留溶剤リスクを下げたい。優先するのは？", "choices": ["乾燥プロファイルと溶剤設計の再最適化", "グラフィックの線を太くする", "特色数を減らす", "フィルム厚を減らす"], "answer": 0, "exp": "プロセス条件と溶剤設計が本質。", "level": 2, "tags": ["判断", "量産"]}, {"id": "Q0030", "cat": "網点/線数/階調", "q": "疑似網点の線数を 120 lpi に上げる際の留意点は？", "choices": ["版/基材/転移性のバランス確認", "照明を暗くする", "テンションゼロにする", "色数を半分にする"], "answer": 0, "exp": "線数上昇はインキ転移性・トーン再現・摩耗とトレードオフ。", "level": 2, "tags": ["線数", "階調"]}, {"id": "Q0031", "cat": "網点/線数/階調", "q": "疑似網点の線数を 150 lpi に上げる際の留意点は？", "choices": ["版/基材/転移性のバランス確認", "照明を暗くする", "テンションゼロにする", "色数を半分にする"], "answer": 0, "exp": "線数上昇はインキ転移性・トーン再現・摩耗とトレードオフ。", "level": 2, "tags": ["線数", "階調"]}, {"id": "Q0032", "cat": "網点/線数/階調", "q": "疑似網点の線数を 175 lpi に上げる際の留意点は？", "choices": ["版/基材/転移性のバランス確認", "照明を暗くする", "テンションゼロにする", "色数を半分にする"], "answer": 0, "exp": "線数上昇はインキ転移性・トーン再現・摩耗とトレードオフ。", "level": 2, "tags": ["線数", "階調"]}, {"id": "Q0033", "cat": "インキ/溶剤", "q": "ポリウレタン系バインダーを用いたグラビアインキの特長として適切なのは？", "choices": ["密着性・耐屈曲に優れる", "常に最安", "必ず水性", "金属面にだけ密着する"], "answer": 0, "exp": "PU系はフィルム用途でバランス良好（配合による）。", "level": 2, "tags": ["PU", "バインダー"]}, {"id": "Q0034", "cat": "色/色校正", "q": "ΔE*00を用いる利点は？", "choices": ["人間の知覚差に近く評価安定", "常にΔE*abより小さい", "L*のみを評価する", "機器校正が不要"], "answer": 0, "exp": "CIEDE2000は知覚均等性に配慮。", "level": 2, "tags": ["ΔE", "CIEDE2000"]}, {"id": "Q0035", "cat": "欠陥/トラブル", "q": "版面にインキが残り濃度が不安定。対策は？", "choices": ["ブレード角度/圧/材質の再設定", "テンションをゼロに", "特色数を増やす", "照明をD30へ"], "answer": 0, "exp": "ブレード/版/粘度/表面張力の最適化が鍵。", "level": 2, "tags": ["ブレード", "粘度"]}, {"id": "Q0036", "cat": "欠陥/トラブル", "q": "泡混入でピンホール。まずは？", "choices": ["インキの脱泡/循環条件確認", "基材厚を2倍", "デザインをRGB化", "温度を下げすぎる"], "answer": 0, "exp": "循環・撹拌・温調・フィルター確認。", "level": 2, "tags": ["泡", "ピンホール"]}, {"id": "Q0037", "cat": "見当/レジ", "q": "立ち上がり時のみレジ不安定。原因は？", "choices": ["テンション立ち上げ/乾燥到達温度の遅れ", "版周長差", "特色が多い", "RGB画像"], "answer": 0, "exp": "安定ゾーンに入るまで張力・温度が不安定。", "level": 2, "tags": ["テンション", "立上げ"]}, {"id": "Q0038", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0039", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0040", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0041", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0042", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0043", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0044", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0045", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0046", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0047", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0048", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0049", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0050", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0051", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0052", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0053", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0054", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0055", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0056", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0057", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0058", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0059", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0060", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0061", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0062", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0063", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0064", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0065", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0066", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0067", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0068", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0069", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0070", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0071", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0072", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0073", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0074", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0075", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0076", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0077", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0078", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0079", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0080", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0081", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0082", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0083", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0084", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0085", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0086", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0087", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0088", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0089", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0090", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0091", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0092", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0093", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0094", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0095", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0096", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0097", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0098", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0099", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0100", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0101", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0102", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0103", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0104", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0105", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0106", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0107", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0108", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0109", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0110", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0111", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0112", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0113", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0114", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0115", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0116", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0117", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0118", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0119", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0120", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0121", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0122", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0123", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0124", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0125", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0126", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0127", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0128", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0129", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0130", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0131", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0132", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0133", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0134", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0135", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0136", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0137", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}, {"id": "Q0138", "cat": "CMYK/特色/プロファイル", "q": "プロファイル", "choices": "店頭LED光で青緑が沈む。考慮すべきは？", "answer": ["メタメリズムとプロファイル再評価", "シャドウを黒で潰す", "特色をすべてCMYK化", "網点角度を全て同じにする"], "exp": 0, "level": "光源依存評価と打合せのすり合わせ。", "tags": ["メタメリズム", "店頭光"]}, {"id": "Q0139", "cat": "デザイン/調子/しずる", "q": "写真", "choices": "肉のしずる感で避けたいレタッチは？", "answer": ["不自然な赤カブリの過剰付与", "適切なグロス強調", "微細なコントラスト調整", "白引き前提の階調最適化"], "exp": 0, "level": "赤カブリ過多は劣化や生っぽさを損なう。", "tags": ["肉", "レタッチ"]}, {"id": "Q0140", "cat": "乾燥/設備", "q": "ドライヤー", "choices": "最終ゾーンでの温度を上げる目的として妥当なのは？", "answer": ["高沸点溶剤の残留低減", "版の傷を消す", "見当ズレ解消", "COFを下げる"], "exp": 0, "level": "高沸点成分の追い出しに効く。", "tags": ["乾燥プロファイル"]}]`;
+const GLOSSARY_JSON_STRING  = `[{"term": "レベリング", "cat": "インキ", "desc": "塗膜が平滑になる挙動。表面張力・溶剤バランスが影響。"}, {"term": "レジスター制御", "cat": "レジ/搬送", "desc": "センサーで見当マークを読み取り自動補正。"}, {"term": "疑似輪郭（バンディング）", "cat": "網点/製版", "desc": "階調の不連続による縞。線数・ガンマ設定で緩和。"}, {"term": "ガス抜け", "cat": "欠陥", "desc": "乾燥時に発生するガスが抜けず欠陥化。条件最適化で抑制。"}, {"term": "VOC回収装置", "cat": "装置/工程", "desc": "溶剤蒸気を回収し再利用・排出削減。"}, {"term": "標準見本（スタンダード）", "cat": "色評価", "desc": "合意済みの色基準サンプル。"}, {"term": "グロス（光沢）", "cat": "色評価", "desc": "表面の鏡面反射。印象やしずる感に影響。"}, {"term": "ガモット", "cat": "カラマネ", "desc": "色空間の再現可能範囲。基材・白引き・プロファイルで変化。"}, {"term": "階調レンジ", "cat": "網点/製版", "desc": "再現可能な最暗～最明の幅。"}, {"term": "N-値（濃度）", "cat": "色評価", "desc": "濃度計の読み。印刷管理の指標。"}, {"term": "グラビア印刷", "cat": "印刷方式", "desc": "凹版のセルにインキを保持し、ドクターブレードで余剰を掻き取り転移する方式。広面積ベタ・濃度ムラの少ない表現が得意。"}, {"term": "ドクターブレード", "cat": "装置/工程", "desc": "版胴表面の余剰インキを掻き取り、セル内のインキのみを残す刃。角度・圧・材質で転移が変わる。"}, {"term": "セル（gravure cell）", "cat": "印刷方式", "desc": "版に彫られた微小凹部。形状・容量・深さがインキ量と調子に影響。"}, {"term": "コロナ処理", "cat": "基材", "desc": "放電で表面を活性化しダイン値を上げる処理。OPP/PET等で密着性向上に必須。"}, {"term": "ダイン値", "cat": "基材", "desc": "表面自由エネルギー指標（dyn/cm）。印刷・ラミの『ぬれ』に関係。"}, {"term": "ポリウレタン系インキ", "cat": "インキ", "desc": "PUバインダーを用いたインキ。密着・耐屈曲のバランスが良い。"}, {"term": "残留溶剤", "cat": "インキ", "desc": "乾燥後に基材に残る溶剤。官能・安全・規格面で管理が必要。"}, {"term": "トンネルドライヤー", "cat": "装置/工程", "desc": "多ゾーン構成の乾燥機。温度・風量・風速プロファイルで揮発挙動を制御。"}, {"term": "レジ（見当）", "cat": "レジ/搬送", "desc": "多色印刷での各色重ね位置。張力・周長・機械精度・熱影響でズレる。"}, {"term": "メタメリズム", "cat": "色評価", "desc": "光源が変わると色差が変動する現象。複数光源で評価・合意が重要。"}, {"term": "ΔE*00", "cat": "色評価", "desc": "CIEDE2000色差。人の知覚差に近い評価が可能。"}, {"term": "白インキ（アンダーホワイト）", "cat": "カラマネ", "desc": "下地に白を敷いて基材色の影響を抑え、発色を安定化。"}, {"term": "疑似網点", "cat": "網点/製版", "desc": "AMスクリーン風に階調を再現。線数・角度・セル設計が肝。"}, {"term": "しずる感", "cat": "デザイン", "desc": "食品などの『おいしそう』『みずみずしい』と感じる視覚的魅力。ハイライトやグロスの演出が鍵。"}, {"term": "ブロッキング", "cat": "欠陥", "desc": "巻取りで層同士が貼り付き離れにくくなる不良。残留溶剤・巻温・圧の影響。"}, {"term": "ピンホール", "cat": "欠陥", "desc": "微細な欠落点。異物・泡・版傷・ブレード条件などが原因。"}, {"term": "プロファイル（ICC）", "cat": "カラマネ", "desc": "入出力機器の色特性定義。CMYK変換の再現性に直接影響。"}, {"term": "基準試験片（標準チャート）", "cat": "色評価", "desc": "濃度・網点再現・色差比較などの参照。D50等の規定下で評価。"}, {"term": "EVOH", "cat": "基材", "desc": "高酸素バリア樹脂。極性が高く、インキ/接着の適合に配慮が必要。"}, {"term": "OPP", "cat": "基材", "desc": "二軸延伸ポリプロピレン。透明性・剛性に優れ、表面処理により印刷適性向上。"}, {"term": "PET", "cat": "基材", "desc": "耐熱性と寸法安定性に優れる。表面処理・プライマーで密着向上。"}, {"term": "セル容量", "cat": "印刷方式", "desc": "セルの体積。インキ量・濃度・階調再現に関与。"}, {"term": "版周長", "cat": "印刷方式", "desc": "一周の長さ。周長差は周期的見当ズレを生む。"}, {"term": "Fogra/GRACoL", "cat": "色評価", "desc": "標準印刷条件規格群。参照プロファイルとして用いる。"}, {"term": "アニロックスロール", "cat": "装置/工程", "desc": "（フレキソで使用）インキ量を定量供給するロール。グラビアとは別物。"}, {"term": "スクミ", "cat": "欠陥", "desc": "版にインキが残りやすく濃度が不安定になる現象。ブレード/粘度/表面張力で対処。"}, {"term": "COF（摩擦係数）", "cat": "QA/実務", "desc": "パッケージ表面の滑り性指標。ラミ・コート構成に依存。"}, {"term": "ドットゲイン", "cat": "網点/製版", "desc": "網点が設計より大きく出ること。過濃/トーン変化の原因。"}, {"term": "見当マーク", "cat": "レジ/搬送", "desc": "レジ制御・検査用の標準マーク。位置ズレを検知。"}, {"term": "特色", "cat": "カラマネ", "desc": "CMYKでは再現困難な色を単独インキで表現。PANTONEなど。"}, {"term": "校了", "cat": "色評価", "desc": "校正が合意され量産承認となる段階。条件合意が必須。"}, {"term": "耐ブロッキング性", "cat": "QA/実務", "desc": "巻取り保管で貼り付きにくい性質。残留溶剤・温度・圧で変動。"}, {"term": "巻取りテンション", "cat": "レジ/搬送", "desc": "ウェブ搬送時の張力。見当・皺・寸法に影響。"}, {"term": "トーンカーブ", "cat": "デザイン", "desc": "画像の階調分布を制御する曲線。再現レンジに合わせ最適化。"}, {"term": "D50/D65", "cat": "色評価", "desc": "標準光源。D50（印刷評価）/D65（日中光）など。"}, {"term": "プライマー", "cat": "基材", "desc": "密着性を高める下塗り層。表面処理と併用される。"}, {"term": "スリット", "cat": "QA/実務", "desc": "ロールを所定幅に裁断。巻姿・端面品質が重要。"}, {"term": "巻硬さ", "cat": "QA/実務", "desc": "巻取りの硬さ。ブロッキング/伸縮/輸送での安定に関与。"}, {"term": "版圧", "cat": "印刷方式", "desc": "版と圧胴の当たり。インキ転移と濃度に影響。"}, {"term": "ギアマーク", "cat": "欠陥", "desc": "駆動系周期に起因する縞。周長/ギアの偏心・バックラッシュ等。"}, {"term": "インキ粘度", "cat": "インキ", "desc": "流動性。転移性・にじみ・霧化に関わる。"}, {"term": "表面張力", "cat": "インキ", "desc": "ぬれ/レベリングに関係。低すぎるとミスティング等の原因。"}, {"term": "補助項目53", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目54", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目55", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目56", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目57", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目58", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目59", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目60", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目61", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目62", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目63", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目64", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目65", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目66", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目67", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目68", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目69", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目70", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目71", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目72", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目73", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目74", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目75", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目76", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目77", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目78", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目79", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目80", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目81", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目82", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目83", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目84", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目85", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目86", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目87", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目88", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目89", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目90", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目91", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目92", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目93", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目94", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目95", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目96", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目97", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目98", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目99", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}, {"term": "補助項目100", "cat": "QA/実務", "desc": "ユーザ拡張用のプレースホルダー定義。"}]`;
+</script>
+
+</body>
+</html>
