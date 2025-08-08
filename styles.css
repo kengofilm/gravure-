@@ -3,3 +3,48 @@ h1 { background: #444; color: white; padding: 10px; }
 nav { background: #ddd; padding: 5px; }
 button { margin: 2px; padding: 5px 10px; }
 #app { padding: 10px; background: white; }
+/* === Contrast Fix Patch v20250808b === */
+/* Buttons */
+.btn{
+  background: var(--pri);
+  color: #ffffff;
+  border: none;
+}
+.btn:focus{ outline: 2px solid rgba(255,255,255,.35); outline-offset: 2px; }
+.btn.secondary{
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #475569;
+}
+.btn.secondary:active{ transform: translateY(1px); }
+
+/* Choices (answers) */
+.choice{
+  background: #1f2937;
+  color: #e5e7eb;
+  border: 1px solid #475569;
+}
+.choice.correct{
+  background: #065f46;
+  color: #ffffff;
+  border-color: #10b981;
+}
+.choice.wrong{
+  background: #7f1d1d;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+/* Input fields */
+.input{
+  background: #111827;
+  color: #e5e7eb;
+  border: 1px solid #475569;
+}
+
+/* Light mode overrides */
+@media (prefers-color-scheme: light){
+  .btn.secondary{ background: #e5e7eb; color: #111827; border-color: #cbd5e1; }
+  .choice{ background: #ffffff; color: #111827; border-color: #cbd5e1; }
+  .input{ background: #ffffff; color: #111827; border-color: #cbd5e1; }
+}
